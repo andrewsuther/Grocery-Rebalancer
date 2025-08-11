@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+import os, re, sys, pathlib, urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parent
+PROJECT = ROOT if (ROOT/'index.html').exists() else ROOT/'Rebalancer'
+INDEX = PROJECT/'index.html'
+VENDOR = PROJECT/'vendor'
+VENDOR.mkdir(exist_ok=True)
+
+external = [
+  "https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js",
+  "https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js",
+  "https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js",
+  "https://cdn.tailwindcss.com",
+  "https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"
+]
+
+def fname(url: str) -> str:
+    name = url.split('/')[-1] or 'script.js'
+    # handle cdn.tailwindcss.com (no filename)
+    if 'cdn.tailwindcss.com' in url:
+        name = 'tailwindcdn.js'
+    return name
+
+def download(url: str, dest_dir: pathlib.Path) -> pathlib.Path:
+    out = dest_dir / fname(url)
+    print(f"Downloading {url} -> {out}")
+    with urllib.request.urlopen(url) as r, open(out, 'wb') as f:
+        f.write(r.read())
+    return out
+
+def rewrite_index(index_path: pathlib.Path, mapping: dict):
+    html = index_path.read_text(encoding='utf-8', errors='ignore')
+    for remote, local in mapping.items():
+        html = html.replace(remote, local)
+    index_path.write_text(html, encoding='utf-8')
+    print(f"Rewrote {index_path} to use local vendor files.")
+
+def main():
+    if not INDEX.exists():
+        print("Could not find index.html. Run this from the project root or place the script next to index.html.")
+        sys.exit(1)
+    mapping = {}
+    for url in external:
+        local_rel = f"vendor/{fname(url)}"
+        download(url, VENDOR)
+        mapping[url] = local_rel
+    rewrite_index(INDEX, mapping)
+    print("Done. Test with:  python3 -m http.server 8080  (then open http://localhost:8080)")
+
+if __name__ == "__main__":
+    main()
